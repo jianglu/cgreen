@@ -1,0 +1,6 @@
+*.a
+*.o
+src/collector
+src/collector.c
+src/collector.dSYM
+tests/all_tests
