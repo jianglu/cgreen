@@ -18,6 +18,7 @@ struct TestReporter_ {
 	int failures;
 	int exceptions;
 	void *breadcrumb;
+	int log_depth;
 	int ipc;
 	void *memo;
     void *reporter_context;
@@ -30,5 +31,6 @@ void reporter_start(TestReporter *reporter, const char *name);
 void reporter_finish(TestReporter *reporter, const char *name);
 void add_reporter_result(TestReporter *reporter, int result);
 void send_reporter_completion_notification(TestReporter *reporter);
+void set_log_depth(TestReporter *reporter, int log_depth);
 
 #endif

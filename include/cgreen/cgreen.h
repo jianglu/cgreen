@@ -5,6 +5,7 @@ extern "C"
 
 #include "unit.h"
 #include "text_reporter.h"
+#include "file_reporter.h"
 #include "assertions.h"
 
 #ifdef __cplusplus

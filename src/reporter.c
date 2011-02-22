@@ -3,7 +3,7 @@
 #include <cgreen/breadcrumb.h>
 #include <stdlib.h>
 #include <stdio.h>
-#if !defined WIN32 && !defined WINCE
+#if !defined WIN32 && !defined WINCE && !defined ANDROID
 #include <sys/msg.h>
 #endif
 #include <stdarg.h>
@@ -38,6 +38,7 @@ TestReporter *create_reporter() {
 	reporter->failures = 0;
 	reporter->exceptions = 0;
 	reporter->breadcrumb = (void *)create_breadcrumb();
+	reporter->log_depth = 1;
 	reporter->ipc = start_cgreen_messaging(45);
 	context.reporter = reporter;
     return reporter;
@@ -103,4 +104,8 @@ static void read_reporter_results(TestReporter *reporter) {
         (*reporter->show_incomplete)(reporter, get_current_from_breadcrumb((CgreenBreadcrumb *)reporter->breadcrumb));
         reporter->exceptions++;
     }
+}
+
+void set_log_depth(TestReporter *reporter, int log_depth) {
+    reporter->log_depth = log_depth;
 }

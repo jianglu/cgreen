@@ -19,6 +19,10 @@
 #define will_respond(f, r, ...) will_return_(#f, (intptr_t)r); expect_(#f, __FILE__, __LINE__, (Constraint *)__VA_ARGS__ +0, (Constraint *)0)
 #define always_respond(f, r, ...) always_return_(#f, (intptr_t)r); always_expect_(#f, __FILE__, __LINE__, (Constraint *)__VA_ARGS__ +0, (Constraint *)0)
 
+#define mock_enabled() mock_enabled_(__FUNCTION__)
+#define disable_mock(f) disable_mock_(#f)
+#define enable_mock(f) enable_mock_(#f)
+
 intptr_t mock_(const char *function, const char *parameters, ...);
 void expect_(const char *function, const char *test_file, int test_line, ...);
 void always_expect_(const char *function, const char *test_file, int test_line, ...);
@@ -27,5 +31,10 @@ void will_return_(const char *function, intptr_t result);
 void always_return_(const char *function, intptr_t result);
 void clear_mocks();
 void tally_mocks(TestReporter *reporter);
+
+int mock_enabled_(const char *function);
+void disable_mock_(const char *function);
+void enable_mock_(const char *function);
+void disable_all_mocks();
 
 #endif

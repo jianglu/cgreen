@@ -21,7 +21,7 @@ TestReporter *create_text_reporter() {
 
 static void text_reporter_start(TestReporter *reporter, const char *name) {
 	reporter_start(reporter, name);
-	if (get_breadcrumb_depth((CgreenBreadcrumb *)reporter->breadcrumb) == 1) {
+	if (get_breadcrumb_depth((CgreenBreadcrumb *)reporter->breadcrumb) == reporter->log_depth) {
 		printf("Running \"%s\"...\n",
 		       get_current_from_breadcrumb((CgreenBreadcrumb *)reporter->breadcrumb));
 	}

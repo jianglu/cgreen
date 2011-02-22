@@ -29,6 +29,9 @@ typedef struct UnwantedCall_ {
 static CgreenVector *result_queue = NULL;
 static CgreenVector *expectation_queue = NULL;
 static CgreenVector *unwanted_calls = NULL;
+static CgreenVector *disabled_mocks = NULL;
+static CgreenVector *enabled_mocks = NULL;
+static char all_mocks_disabled = 0;
 
 intptr_t stubbed_result(const char *function);
 static RecordedResult *create_recorded_result(const char *function, intptr_t result);
@@ -115,6 +118,15 @@ void clear_mocks() {
         destroy_cgreen_vector(unwanted_calls);
 		unwanted_calls = NULL;
     }
+    if (disabled_mocks != NULL) {
+        destroy_cgreen_vector(disabled_mocks);
+		disabled_mocks = NULL;
+    }
+    if (enabled_mocks != NULL) {
+        destroy_cgreen_vector(enabled_mocks);
+		enabled_mocks = NULL;
+    }
+    all_mocks_disabled = 0;
 }
 
 void tally_mocks(TestReporter *reporter) {
@@ -273,4 +285,47 @@ void apply_any_constraints(RecordedExpectation *expectation, const char *paramet
 			}
         }
     }
+}
+
+void disable_all_mocks() {
+    all_mocks_disabled = 1;
+}
+
+int mock_enabled_(const char *function) {
+    int i;
+    if (all_mocks_disabled) {
+        // Mocks disabled by default, check for any that are enabled
+        for (i = 0; i < cgreen_vector_size(enabled_mocks); i++) {
+            char *enabled_mock = (char *)cgreen_vector_get(enabled_mocks, i);
+            if (strcmp(enabled_mock, function) == 0) {
+                return 1;
+            }
+        }
+        return 0;
+    } else {
+        // Mocks enabled by default, check for any that are disabled
+        for (i = 0; i < cgreen_vector_size(disabled_mocks); i++) {
+            char *disabled_mock = (char *)cgreen_vector_get(disabled_mocks, i);
+            if (strcmp(disabled_mock, function) == 0) {
+                return 0;
+            }
+        }
+        return 1;
+    }
+    // Should never reach here
+    return 1;
+}
+
+void disable_mock_(const char *function) {
+    if (disabled_mocks == NULL) {
+        disabled_mocks = create_cgreen_vector(NULL);
+    }
+    cgreen_vector_add(disabled_mocks, (void *)function);
+}
+
+void enable_mock_(const char *function) {
+    if (enabled_mocks == NULL) {
+        enabled_mocks = create_cgreen_vector(NULL);
+    }
+    cgreen_vector_add(enabled_mocks, (void *)function);
 }
