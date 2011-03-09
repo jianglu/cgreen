@@ -28,19 +28,23 @@ TestReporter *get_test_reporter() {
 TestReporter *create_reporter() {
     TestReporter *reporter = (TestReporter *)malloc(sizeof(TestReporter));
     reporter->destroy = &destroy_reporter;
-	reporter->start = &reporter_start;
-	reporter->finish = &reporter_finish;
-	reporter->show_pass = &show_pass;
-	reporter->show_fail = &show_fail;
-	reporter->show_incomplete = &show_incomplete;
-	reporter->assert_true = &assert_true;
-	reporter->passes = 0;
-	reporter->failures = 0;
-	reporter->exceptions = 0;
-	reporter->breadcrumb = (void *)create_breadcrumb();
-	reporter->log_depth = 1;
-	reporter->ipc = start_cgreen_messaging(45);
-	context.reporter = reporter;
+    reporter->start = &reporter_start;
+    reporter->finish = &reporter_finish;
+    reporter->show_pass = &show_pass;
+    reporter->show_fail = &show_fail;
+    reporter->show_incomplete = &show_incomplete;
+    reporter->assert_true = &assert_true;
+    reporter->passes = 0;
+    reporter->failures = 0;
+    reporter->exceptions = 0;
+    reporter->breadcrumb = (void *)create_breadcrumb();
+    reporter->log_depth = 1;
+    reporter->ipc = start_cgreen_messaging(45);
+    if (reporter->ipc == -1) {
+      free(reporter);
+      return NULL;
+    }
+    context.reporter = reporter;
     return reporter;
 }
 

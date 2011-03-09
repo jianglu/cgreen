@@ -70,6 +70,8 @@ int start_cgreen_messaging(int tag) {
     }
     queues = (CgreenMessageQueue *)realloc(queues, sizeof(CgreenMessageQueue) * ++queue_count);
     queues[queue_count - 1].queue = msgget((long)getpid(), 0666 | IPC_CREAT);
+    if(queues[queue_count - 1].queue == -1)
+      return -1;
     queues[queue_count - 1].owner = getpid();
     queues[queue_count - 1].tag = tag;
     return queue_count - 1;
