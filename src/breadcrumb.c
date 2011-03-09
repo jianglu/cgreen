@@ -7,8 +7,11 @@ struct CgreenBreadcrumb_ {
     int space;
 };
 
-CgreenBreadcrumb *create_breadcrumb() {
-    CgreenBreadcrumb *breadcrumb = (CgreenBreadcrumb *)malloc(sizeof(CgreenBreadcrumb));
+CgreenBreadcrumb *create_breadcrumb(void) {
+    CgreenBreadcrumb *breadcrumb = malloc(sizeof(CgreenBreadcrumb));
+    if (breadcrumb == NULL) {
+        return NULL;
+    }
 	breadcrumb->trail = NULL;
 	breadcrumb->depth = 0;
 	breadcrumb->space = 0;
@@ -16,17 +19,23 @@ CgreenBreadcrumb *create_breadcrumb() {
 }
 
 void destroy_breadcrumb(CgreenBreadcrumb *breadcrumb) {
-	free((char**)breadcrumb->trail);
+	free(breadcrumb->trail);
 	free(breadcrumb);
 }
 
 void push_breadcrumb(CgreenBreadcrumb *breadcrumb, const char *name) {
 	breadcrumb->depth++;
 	if (breadcrumb->depth > breadcrumb->space) {
+        const char **tmp;
 		breadcrumb->space++;
-		breadcrumb->trail = (const char **)realloc(
-				(char **)breadcrumb->trail,
-				sizeof(const char *) * breadcrumb->space);
+        tmp = realloc(breadcrumb->trail,
+                sizeof(const char *) * breadcrumb->space);
+        if (tmp == NULL) {
+            breadcrumb->space--;
+            breadcrumb->depth--;
+            return;
+        }
+        breadcrumb->trail = tmp;
 	}
 	breadcrumb->trail[breadcrumb->depth - 1] = name;
 }
@@ -52,3 +61,5 @@ void walk_breadcrumb(CgreenBreadcrumb *breadcrumb, void (*walker)(const char *, 
         (*walker)(breadcrumb->trail[i], memo);
     }
 }
+
+/* vim: set ts=4 sw=4 et cindent: */

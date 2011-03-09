@@ -1,4 +1,6 @@
 #include <cgreen/messaging.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
 
 #if defined WINCE || defined WIN32
 #include <stdio.h>
@@ -8,6 +10,8 @@
 #endif
 
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #define message_content_size(Type) (sizeof(Type) - sizeof(long))
 
@@ -21,7 +25,6 @@ typedef struct CgreenMessageQueue_ {
     pid_t owner;
 #endif
     int tag;
-
 } CgreenMessageQueue;
 
 typedef struct CgreenMessage_ {
@@ -65,13 +68,20 @@ int start_cgreen_messaging(int tag) {
     queues[queue_count - 1].tag = tag;
     return queue_count - 1;
 #else
+    CgreenMessageQueue *tmp;
     if (queue_count == 0) {
         atexit(&clean_up_messaging);
     }
-    queues = (CgreenMessageQueue *)realloc(queues, sizeof(CgreenMessageQueue) * ++queue_count);
-    queues[queue_count - 1].queue = msgget((long)getpid(), 0666 | IPC_CREAT);
-    if(queues[queue_count - 1].queue == -1)
+    tmp = realloc(queues, sizeof(CgreenMessageQueue) * ++queue_count);
+    if (tmp == NULL) {
+      atexit(&clean_up_messaging);
       return -1;
+    }
+    queues = tmp;
+    queues[queue_count - 1].queue = msgget((long)getpid(), 0666 | IPC_CREAT);
+    if (queues[queue_count - 1].queue == -1) {
+        return -1;
+    }
     queues[queue_count - 1].owner = getpid();
     queues[queue_count - 1].tag = tag;
     return queue_count - 1;
@@ -87,7 +97,11 @@ void send_cgreen_message(int messaging, int result) {
     DWORD dwBytesWritten = 0;
 #endif
 
-    CgreenMessage *message = (CgreenMessage *)malloc(sizeof(CgreenMessage));
+    CgreenMessage *message = malloc(sizeof(CgreenMessage));
+    if (message == NULL) {
+      return;
+    }
+    memset(message, 0, sizeof(*message));
     message->type = queues[messaging].tag;
     message->result = result;
 
@@ -98,7 +112,7 @@ void send_cgreen_message(int messaging, int result) {
     if(!WriteFile(queues[messaging].pWriteQueue, message, sizeof(CgreenMessage), &dwBytesWritten, NULL))
         dwBytesWritten = 0;
 #else
-    msgsnd(queues[messaging].queue, message, sizeof(CgreenMessage), 0);
+    msgsnd(queues[messaging].queue, message, message_content_size(CgreenMessage), 0);
 #endif
     free(message);
 }
@@ -113,7 +127,10 @@ int receive_cgreen_message(int messaging) {
 #endif
 
     int result = 0;
-    CgreenMessage *message = (CgreenMessage *)malloc(sizeof(CgreenMessage));
+    CgreenMessage *message = malloc(sizeof(CgreenMessage));
+    if (message == NULL) {
+      return -1;
+    }
     memset(message, 0, sizeof(CgreenMessage));
 
 #if defined WINCE
@@ -129,12 +146,11 @@ int receive_cgreen_message(int messaging) {
 #else
     ssize_t received = msgrcv(queues[messaging].queue,
                               message,
-                              sizeof(CgreenMessage),
+                              message_content_size(CgreenMessage),
                               queues[messaging].tag,
                               IPC_NOWAIT);
     result = (received > 0 ? message->result : 0);
 #endif
-
 
     free(message);
     return result;
@@ -142,8 +158,7 @@ int receive_cgreen_message(int messaging) {
 
 static void clean_up_messaging(void) {
     int i;
-    for (i = 0; i < queue_count; i++) 
-    {
+    for (i = 0; i < queue_count; i++) {
 #if defined WINCE
         CloseMsgQueue(queues[i].pReadQueue);
         CloseMsgQueue(queues[i].pWriteQueue);
@@ -151,8 +166,7 @@ static void clean_up_messaging(void) {
         DisconnectNamedPipe(queues[i].pReadQueue);
         DisconnectNamedPipe(queues[i].pWriteQueue);
 #else
-        if (queues[i].owner == getpid())
-        {
+        if (queues[i].owner == getpid()) {
             msgctl(queues[i].queue, IPC_RMID, NULL);
         }
 #endif
@@ -161,3 +175,5 @@ static void clean_up_messaging(void) {
     queues = NULL;
     queue_count = 0;
 }
+
+/* vim: set ts=4 sw=4 et cindent: */

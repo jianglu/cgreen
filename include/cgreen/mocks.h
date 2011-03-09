@@ -1,6 +1,10 @@
 #ifndef MOCKS_HEADER
 #define MOCKS_HEADER
 
+#ifdef __cplusplus
+  extern "C" {
+#endif
+
 #if defined WINCE || defined WIN32
 #include <crtdefs.h>
 #else
@@ -10,7 +14,7 @@
 #include <cgreen/reporter.h>
 #include <cgreen/constraint.h>
 
-#define mock(...) mock_(__FUNCTION__, #__VA_ARGS__, (intptr_t)__VA_ARGS__ +0)
+#define mock(...) mock_(__func__, #__VA_ARGS__, (intptr_t)__VA_ARGS__ +0)
 #define expect(f, ...) expect_(#f, __FILE__, __LINE__, (Constraint *)__VA_ARGS__ +0, (Constraint *)0)
 #define always_expect(f, ...) always_expect_(#f, __FILE__, __LINE__, (Constraint *)__VA_ARGS__ +0, (Constraint *)0)
 #define expect_never(f) expect_never_(#f, __FILE__, __LINE__)
@@ -19,7 +23,7 @@
 #define will_respond(f, r, ...) will_return_(#f, (intptr_t)r); expect_(#f, __FILE__, __LINE__, (Constraint *)__VA_ARGS__ +0, (Constraint *)0)
 #define always_respond(f, r, ...) always_return_(#f, (intptr_t)r); always_expect_(#f, __FILE__, __LINE__, (Constraint *)__VA_ARGS__ +0, (Constraint *)0)
 
-#define mock_enabled() mock_enabled_(__FUNCTION__)
+#define mock_enabled() mock_enabled_(__func__)
 #define disable_mock(f) disable_mock_(#f)
 #define enable_mock(f) enable_mock_(#f)
 
@@ -36,5 +40,9 @@ int mock_enabled_(const char *function);
 void disable_mock_(const char *function);
 void enable_mock_(const char *function);
 void disable_all_mocks();
+
+#ifdef __cplusplus
+    }
+#endif
 
 #endif

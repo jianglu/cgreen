@@ -1,15 +1,6 @@
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
-#include "unit.h"
-#include "text_reporter.h"
-#include "file_reporter.h"
-#include "assertions.h"
-
-#ifdef __cplusplus
-}
-#endif
-
+#include <cgreen/unit.h>
+#include <cgreen/text_reporter.h>
+#include <cgreen/cute_reporter.h>
+#include <cgreen/cdash_reporter.h>
+#include <cgreen/assertions.h>
 #include <stdlib.h>
