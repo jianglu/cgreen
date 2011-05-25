@@ -1,4 +1,3 @@
-CC=gcc
 CFLAGS=-g -I./include 
 LIBS=-lm
 OBJECTS=src/unit.o src/messaging.o src/breadcrumb.o src/reporter.o \
