@@ -170,7 +170,7 @@ int run_test_suite(TestSuite *suite, TestReporter *reporter) {
         return EXIT_FAILURE;
     }
     run_every_test(suite, reporter);
-    success = (reporter->failures == 0);
+    success = (reporter->failures == 0 && reporter->exceptions == 0);
     clean_up_test_run(suite, reporter);
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
@@ -185,7 +185,7 @@ int run_single_test(TestSuite *suite, char *name, TestReporter *reporter) {
         return EXIT_FAILURE;
     }
     run_named_test(suite, name, reporter);
-    success = (reporter->failures == 0);
+    success = (reporter->failures == 0 && reporter->exceptions == 0);
     clean_up_test_run(suite, reporter);
     return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
