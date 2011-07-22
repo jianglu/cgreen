@@ -17,20 +17,31 @@
 #include <windows.h>
 #include <signal.h>
 
+#elif defined IPHONE
+
+#include <pthread.h>
+#include <objc/runtime.h>
+#include <objc/message.h>
+
 #else
 
 #include <unistd.h>
 #include <sys/wait.h>
-#include <signal.h>
 
 #endif
 
+#if defined(WINCE) || defined(WIN32) || defined(IPHONE)
+typedef void (*sighandler_t)(int);
+#else
+#include <signal.h>
+#endif
 
+#if defined WINCE || defined WIN32
+#define strdup _strdup
+#endif
 
 
 enum {test_function, test_suite};
-
-typedef void (*sighandler_t)(int);
 
 typedef struct {
     int type;
@@ -49,7 +60,7 @@ struct TestSuite_ {
     int size;
 };
 
-#ifdef WIN32
+#if defined WIN32 || defined IPHONE
 typedef struct
 {
     TestSuite *suite;
@@ -108,7 +119,7 @@ void add_test_(TestSuite *suite, char *name, CgreenTest *test) {
     suite->size++;
     suite->tests = (UnitTest *)realloc(suite->tests, sizeof(UnitTest) * suite->size);
     suite->tests[suite->size - 1].type = test_function;
-    suite->tests[suite->size - 1].name = name;
+    suite->tests[suite->size - 1].name = strdup(name);
     suite->tests[suite->size - 1].sPtr.test = test;
 }
 
@@ -140,7 +151,7 @@ void teardown_(TestSuite *suite, void (*teardown)()) {
     suite->teardown = teardown;
 }
 
-#ifndef WIN32
+#if !defined(WIN32) && !defined(IPHONE)
 void die_in(unsigned int seconds) {
     signal(SIGALRM, (sighandler_t)&stop);
     alarm(seconds);
@@ -268,16 +279,38 @@ unsigned int run_test_thread(void* pVoid)
     {
         send_reporter_completion_notification(pTestParams->reporter);
     }
-    
+
     free(pTestParams);
+    return 0;
+}
+#elif defined IPHONE
+unsigned int iphone_test_thread(void *pVoid){
+    CgTestParams* pTestParams = (CgTestParams*)pVoid;
+
+    void *pool = objc_msgSend(objc_msgSend(objc_getClass("NSAutoreleasePool"), sel_getUid("alloc")), sel_getUid("init"));
+
+    if(!pTestParams)
+        return (unsigned int)-1;
+
+    run_the_test_code(pTestParams->suite, pTestParams->test, pTestParams->reporter);
+    send_reporter_completion_notification(pTestParams->reporter);
+
+    free(pTestParams);
+	objc_msgSend(pool, sel_getUid("release"));
     return 0;
 }
 #endif
 
-
+// Hacked to run tests in their own thread, not their own process.
 static void run_test_in_its_own_process(TestSuite *suite, UnitTest *test, TestReporter *reporter) {
-#ifdef WIN32
+#if defined WIN32
     HANDLE pHandle = NULL;
+#elif defined IPHONE
+	pthread_t thread;
+	pthread_attr_t attr;
+#endif
+
+#if defined WIN32 || defined IPHONE
     CgTestParams* pThreadParams = malloc(sizeof(CgTestParams));
     if(!pThreadParams)
         return;
@@ -288,14 +321,21 @@ static void run_test_in_its_own_process(TestSuite *suite, UnitTest *test, TestRe
 
     (*reporter->start_test)(reporter, test->name);
 
-#ifdef WIN32
-    pHandle = (VOID *)CreateThread(NULL, 
-                                   0, 
-                                   (LPTHREAD_START_ROUTINE) &run_test_thread, 
-                                   (LPVOID) pThreadParams, 
-                                   0, 
+#if defined WIN32
+    pHandle = (VOID *)CreateThread(NULL,
+                                   0,
+                                   (LPTHREAD_START_ROUTINE) &run_test_thread,
+                                   (LPVOID) pThreadParams,
+                                   0,
                                    NULL);
     WaitForSingleObject(pHandle, INFINITE);
+    (*reporter->finish_test)(reporter, test->name);
+#elif defined IPHONE
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+	pthread_create(&thread, &attr, (void *)iphone_test_thread, (void *)pThreadParams);
+	pthread_attr_destroy(&attr);
+    pthread_join(thread, NULL);
     (*reporter->finish_test)(reporter, test->name);
 #else
     if (in_child_process()) {
@@ -309,7 +349,7 @@ static void run_test_in_its_own_process(TestSuite *suite, UnitTest *test, TestRe
 #endif
 }
 
-#ifndef WIN32
+#if !defined(WIN32) && !defined(IPHONE)
 static int in_child_process() {
     pid_t child = fork();
     if (child < 0) {

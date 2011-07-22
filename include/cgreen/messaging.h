@@ -7,6 +7,8 @@
 
 #if defined WINCE || defined WIN32
 #include <stdio.h>
+#elif defined ANDROID
+/* include nothing extra */
 #else
 #include <sys/msg.h>
 #endif

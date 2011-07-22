@@ -52,7 +52,7 @@ Constraint *create_want_constraint(const char *parameter, intptr_t expected, Com
 	constraint->copy_size = 0;
 	constraint->constraint_type = type;
     return constraint;
-} 
+}
 
 Constraint *want_(const char *parameter, intptr_t expected) {
     return create_want_constraint(parameter, expected, &compare_want, &test_want, CG_CONSTRAINT_WANT);

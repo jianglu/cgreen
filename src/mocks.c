@@ -279,7 +279,7 @@ void apply_any_constraints(RecordedExpectation *expectation, const char *paramet
 			case CG_CONSTRAINT_SET:
 				*((int *)actual) = (int)constraint->out_value;
 				break;
-			
+
 			case CG_CONSTRAINT_FILL:
 				memcpy((void *)actual, (void *)constraint->out_value, constraint->copy_size);
 				break;

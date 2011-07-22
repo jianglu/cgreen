@@ -14,7 +14,7 @@ void spaces_should_be_converted_to_zeroes() {
     split_words(sentence);
     int comparison = memcmp("Birds\0of\0a\0feather", sentence, strlen(sentence));
     assert_equal(comparison, 0);
-    free(sentence); 
+    free(sentence);
 }
 
 void mocked_callback(const char *word, void *memo) {

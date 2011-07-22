@@ -14,8 +14,10 @@ TestReporter *create_file_reporter(char *file_name) {
     TestReporter *reporter = create_reporter();
     if (reporter == NULL)
         return NULL;
-    reporter->start = &file_reporter_start;
-    reporter->finish = &file_reporter_finish;
+    reporter->start_suite = &file_reporter_start;
+    reporter->start_test = &file_reporter_start;
+    reporter->finish_test = &file_reporter_finish;
+    reporter->finish_suite = &file_reporter_finish;
     reporter->show_fail = &show_fail;
     reporter->show_incomplete = &show_incomplete;
     reporter->reporter_context =  fopen(file_name, "wt");
