@@ -1,9 +1,9 @@
-CC=gcc
 CFLAGS=-g -I./include 
 LIBS=-lm
 OBJECTS=src/unit.o src/messaging.o src/breadcrumb.o src/reporter.o \
         src/assertions.o src/vector.o src/mocks.o src/constraint.o \
-        src/parameters.o src/text_reporter.o
+        src/parameters.o src/text_reporter.o src/cute_reporter.o \
+        src/cdash_reporter.o src/memory.o
 
 all: clean libcgreen.a collector test
 

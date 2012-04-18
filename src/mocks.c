@@ -29,6 +29,9 @@ typedef struct UnwantedCall_ {
 static CgreenVector *result_queue = NULL;
 static CgreenVector *expectation_queue = NULL;
 static CgreenVector *unwanted_calls = NULL;
+static CgreenVector *disabled_mocks = NULL;
+static CgreenVector *enabled_mocks = NULL;
+static char all_mocks_disabled = 0;
 
 intptr_t stubbed_result(const char *function);
 static RecordedResult *create_recorded_result(const char *function, intptr_t result);
@@ -53,7 +56,7 @@ intptr_t mock_(const char *function, const char *parameters, ...) {
         va_list actual;
         va_start(actual, parameters);
         for (i = 0; i < cgreen_vector_size(names); i++) {
-            apply_any_constraints(expectation, cgreen_vector_get(names, i), va_arg(actual, intptr_t));
+            apply_any_constraints(expectation, (const char *)cgreen_vector_get(names, i), va_arg(actual, intptr_t));
         }
         va_end(actual);
         destroy_cgreen_vector(names);
@@ -115,6 +118,15 @@ void clear_mocks() {
         destroy_cgreen_vector(unwanted_calls);
 		unwanted_calls = NULL;
     }
+    if (disabled_mocks != NULL) {
+        destroy_cgreen_vector(disabled_mocks);
+		disabled_mocks = NULL;
+    }
+    if (enabled_mocks != NULL) {
+        destroy_cgreen_vector(enabled_mocks);
+		enabled_mocks = NULL;
+    }
+    all_mocks_disabled = 0;
 }
 
 void tally_mocks(TestReporter *reporter) {
@@ -194,7 +206,7 @@ RecordedResult *find_result(const char *function) {
         RecordedResult *result = (RecordedResult *)cgreen_vector_get(result_queue, i);
         if (strcmp(result->function, function) == 0) {
             if (! result->should_keep) {
-                return cgreen_vector_remove(result_queue, i);
+                return (RecordedResult *) cgreen_vector_remove(result_queue, i);
             }
             return result;
         }
@@ -205,7 +217,7 @@ RecordedResult *find_result(const char *function) {
 static void unwanted_check(const char *function) {
     int i;
     for (i = 0; i < cgreen_vector_size(unwanted_calls); i++) {
-        UnwantedCall *unwanted = cgreen_vector_get(unwanted_calls, i);
+        UnwantedCall *unwanted = (UnwantedCall *) cgreen_vector_get(unwanted_calls, i);
         if (strcmp(unwanted->function, function) == 0) {
             (*get_test_reporter()->assert_true)(
                     get_test_reporter(),
@@ -217,10 +229,11 @@ static void unwanted_check(const char *function) {
     }
 }
 
-void trigger_unfulfilled_expectations(CgreenVector *expectation_queue, TestReporter *reporter) {
+void trigger_unfulfilled_expectations(CgreenVector *expect_queue,
+                                      TestReporter *reporter) {
     int i;
     for (i = 0; i < cgreen_vector_size(expectation_queue); i++) {
-        RecordedExpectation *expectation = cgreen_vector_get(expectation_queue, i);
+        RecordedExpectation *expectation = cgreen_vector_get(expect_queue, i);
         if (! expectation->should_keep) {
             (*reporter->assert_true)(
                     reporter,
@@ -239,7 +252,7 @@ RecordedExpectation *find_expectation(const char *function) {
                 (RecordedExpectation *)cgreen_vector_get(expectation_queue, i);
         if (strcmp(expectation->function, function) == 0) {
             if (! expectation->should_keep) {
-                return cgreen_vector_remove(expectation_queue, i);
+                return (RecordedExpectation *) cgreen_vector_remove(expectation_queue, i);
             }
             return expectation;
         }
@@ -274,3 +287,48 @@ void apply_any_constraints(RecordedExpectation *expectation, const char *paramet
         }
     }
 }
+
+void disable_all_mocks() {
+    all_mocks_disabled = 1;
+}
+
+int mock_enabled_(const char *function) {
+    int i;
+    if (all_mocks_disabled) {
+        // Mocks disabled by default, check for any that are enabled
+        for (i = 0; i < cgreen_vector_size(enabled_mocks); i++) {
+            char *enabled_mock = (char *)cgreen_vector_get(enabled_mocks, i);
+            if (strcmp(enabled_mock, function) == 0) {
+                return 1;
+            }
+        }
+        return 0;
+    } else {
+        // Mocks enabled by default, check for any that are disabled
+        for (i = 0; i < cgreen_vector_size(disabled_mocks); i++) {
+            char *disabled_mock = (char *)cgreen_vector_get(disabled_mocks, i);
+            if (strcmp(disabled_mock, function) == 0) {
+                return 0;
+            }
+        }
+        return 1;
+    }
+    // Should never reach here
+    return 1;
+}
+
+void disable_mock_(const char *function) {
+    if (disabled_mocks == NULL) {
+        disabled_mocks = create_cgreen_vector(NULL);
+    }
+    cgreen_vector_add(disabled_mocks, (void *)function);
+}
+
+void enable_mock_(const char *function) {
+    if (enabled_mocks == NULL) {
+        enabled_mocks = create_cgreen_vector(NULL);
+    }
+    cgreen_vector_add(enabled_mocks, (void *)function);
+}
+
+/* vim: set ts=4 sw=4 et cindent: */

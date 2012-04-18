@@ -30,12 +30,14 @@
 
 enum {test_function, test_suite};
 
+typedef void (*sighandler_t)(int);
+
 typedef struct {
     int type;
     union {
         void (*test)();
         TestSuite *suite;
-    };
+    } sPtr;
     char *name;
 } UnitTest;
 
@@ -73,7 +75,7 @@ static void allow_ctrl_c();
 static void stop();
 static void run_the_test_code(TestSuite *suite, UnitTest *test, TestReporter *reporter);
 static void tally_counter(const char *file, int line, int expected, int actual, void *abstract_reporter);
-static void die(char *message, ...);
+static void die(const char *message, ...);
 static void do_nothing();
 
 TestSuite *create_named_test_suite(const char *name) {
@@ -86,9 +88,20 @@ TestSuite *create_named_test_suite(const char *name) {
     return suite;
 }
 
-void destroy_test_suite(TestSuite *suite) {
-    free(suite->tests);
-    free(suite);
+void destroy_test_suite(TestSuite *suiteToDestroy) {
+	int i;
+	for (i = 0; i < suiteToDestroy->size; i++) {
+		UnitTest test = suiteToDestroy->tests[i];
+		TestSuite* suite = test.sPtr.suite;
+		if (test_suite == test.type && suite != NULL) {
+			suiteToDestroy->tests[i].sPtr.suite = NULL;
+            destroy_test_suite(suite);
+		}
+	}
+    if (suiteToDestroy->tests != NULL)
+		free(suiteToDestroy->tests);
+
+    free(suiteToDestroy);
 }
 
 void add_test_(TestSuite *suite, char *name, CgreenTest *test) {
@@ -96,7 +109,7 @@ void add_test_(TestSuite *suite, char *name, CgreenTest *test) {
     suite->tests = (UnitTest *)realloc(suite->tests, sizeof(UnitTest) * suite->size);
     suite->tests[suite->size - 1].type = test_function;
     suite->tests[suite->size - 1].name = name;
-    suite->tests[suite->size - 1].test = test;
+    suite->tests[suite->size - 1].sPtr.test = test;
 }
 
 void add_tests_(TestSuite *suite, const char *names, ...) {
@@ -116,7 +129,7 @@ void add_suite_(TestSuite *owner, char *name, TestSuite *suite) {
     owner->tests = (UnitTest *)realloc(owner->tests, sizeof(UnitTest) * owner->size);
     owner->tests[owner->size - 1].type = test_suite;
     owner->tests[owner->size - 1].name = name;
-    owner->tests[owner->size - 1].suite = suite;
+    owner->tests[owner->size - 1].sPtr.suite = suite;
 }
 
 void setup_(TestSuite *suite, void (*setup)()) {
@@ -129,66 +142,93 @@ void teardown_(TestSuite *suite, void (*teardown)()) {
 
 #ifndef WIN32
 void die_in(unsigned int seconds) {
-    signal(SIGALRM, &stop);
+    signal(SIGALRM, (sighandler_t)&stop);
     alarm(seconds);
 }
 #endif
 
+int count_tests(TestSuite *suite) {
+    int count = 0;
+    int i;
+    for (i = 0; i < suite->size; i++) {
+        if (suite->tests[i].type == test_function) {
+            count++;
+        } else {
+            count += count_tests(suite->tests[i].sPtr.suite);
+        }
+    }
+    return count;
+}
+
 int run_test_suite(TestSuite *suite, TestReporter *reporter) {
-	int success = 0;
+    int success = 0;
+    if (reporter == NULL) {
+        return EXIT_FAILURE;
+    }
+    success = setup_reporting(reporter);
+    if (success < 0) {
+        return EXIT_FAILURE;
+    }
     run_every_test(suite, reporter);
-	success = (reporter->failures == 0);
-	clean_up_test_run(suite, reporter);
-	return success ? EXIT_SUCCESS : EXIT_FAILURE;
+    success = (reporter->failures == 0 && reporter->exceptions == 0);
+    clean_up_test_run(suite, reporter);
+    return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 int run_single_test(TestSuite *suite, char *name, TestReporter *reporter) {
-	int success = 0;
+    int success = 0;
+    if (reporter == NULL) {
+        return EXIT_FAILURE;
+    }
+    success = setup_reporting(reporter);
+    if (success < 0) {
+        return EXIT_FAILURE;
+    }
     run_named_test(suite, name, reporter);
-	success = (reporter->failures == 0);
-	clean_up_test_run(suite, reporter);
-	return success ? EXIT_SUCCESS : EXIT_FAILURE;
+    success = (reporter->failures == 0 && reporter->exceptions == 0);
+    clean_up_test_run(suite, reporter);
+    return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 static void clean_up_test_run(TestSuite *suite, TestReporter *reporter) {
     (*reporter->destroy)(reporter);
-	destroy_test_suite(suite);
+    destroy_test_suite(suite);
 }
 
 static void run_every_test(TestSuite *suite, TestReporter *reporter) {
-	int i = 0;
+    int i = 0;
 
-    (*reporter->start)(reporter, suite->name);
+    (*reporter->start_suite)(reporter, suite->name, count_tests(suite));
     for (i = 0; i < suite->size; i++) {
         if (suite->tests[i].type == test_function) {
             run_test_in_its_own_process(suite, &(suite->tests[i]), reporter);
         } else {
             (*suite->setup)();
-            run_every_test(suite->tests[i].suite, reporter);
+            run_every_test(suite->tests[i].sPtr.suite, reporter);
             (*suite->teardown)();
         }
     }
     send_reporter_completion_notification(reporter);
-	(*reporter->finish)(reporter, suite->name);
+    (*reporter->finish_suite)(reporter, suite->name);
 }
 
 static void run_named_test(TestSuite *suite, char *name, TestReporter *reporter) {
-	int i = 0;
+    int i = 0;
 
-    (*reporter->start)(reporter, suite->name);
+    (*reporter->start_suite)(reporter, suite->name, count_tests(suite));
     for (i = 0; i < suite->size; i++) {
         if (suite->tests[i].type == test_function) {
             if (strcmp(suite->tests[i].name, name) == 0) {
                 run_test_in_the_current_process(suite, &(suite->tests[i]), reporter);
             }
-        } else if (has_test(suite->tests[i].suite, name)) {
+        } else if (has_test(suite->tests[i].sPtr.suite, name)) {
             (*suite->setup)();
-            run_named_test(suite->tests[i].suite, name, reporter);
+            run_named_test(suite->tests[i].sPtr.suite, name, reporter);
             (*suite->teardown)();
         }
     }
     send_reporter_completion_notification(reporter);
-	(*reporter->finish)(reporter, suite->name);
+    (*reporter->finish_suite)(reporter, suite->name);
 }
 
 static int has_test(TestSuite *suite, char *name) {
@@ -198,7 +238,7 @@ static int has_test(TestSuite *suite, char *name) {
             if (strcmp(suite->tests[i].name, name) == 0) {
                 return 1;
             }
-        } else if (has_test(suite->tests[i].suite, name)) {
+        } else if (has_test(suite->tests[i].sPtr.suite, name)) {
             return 1;
         }
 	}
@@ -206,10 +246,10 @@ static int has_test(TestSuite *suite, char *name) {
 }
 
 static void run_test_in_the_current_process(TestSuite *suite, UnitTest *test, TestReporter *reporter) {
-	(*reporter->start)(reporter, test->name);
-	run_the_test_code(suite, test, reporter);
+    (*reporter->start_test)(reporter, test->name);
+    run_the_test_code(suite, test, reporter);
     send_reporter_completion_notification(reporter);
-	(*reporter->finish)(reporter, test->name);
+    (*reporter->finish_test)(reporter, test->name);
 }
 
 
@@ -246,7 +286,7 @@ static void run_test_in_its_own_process(TestSuite *suite, UnitTest *test, TestRe
     pThreadParams->test = test;
 #endif
 
-    (*reporter->start)(reporter, test->name);
+    (*reporter->start_test)(reporter, test->name);
 
 #ifdef WIN32
     pHandle = (VOID *)CreateThread(NULL, 
@@ -256,7 +296,7 @@ static void run_test_in_its_own_process(TestSuite *suite, UnitTest *test, TestRe
                                    0, 
                                    NULL);
     WaitForSingleObject(pHandle, INFINITE);
-    (*reporter->finish)(reporter, test->name);
+    (*reporter->finish_test)(reporter, test->name);
 #else
     if (in_child_process()) {
         run_the_test_code(suite, test, reporter);
@@ -264,7 +304,7 @@ static void run_test_in_its_own_process(TestSuite *suite, UnitTest *test, TestRe
         stop();
     } else {
         wait_for_child_process();
-        (*reporter->finish)(reporter, test->name);
+        (*reporter->finish_test)(reporter, test->name);
     }
 #endif
 }
@@ -287,7 +327,6 @@ static void wait_for_child_process() {
     allow_ctrl_c();
 }
 
-
 static void ignore_ctrl_c() {
     signal(SIGINT, SIG_IGN);
 }
@@ -304,10 +343,10 @@ static void stop() {
 static void run_the_test_code(TestSuite *suite, UnitTest *test, TestReporter *reporter) {
     significant_figures_for_assert_double_are(8);
     clear_mocks();
-	(*suite->setup)();
-    (*test->test)();
-	(*suite->teardown)();
-	tally_mocks(reporter);
+    (*suite->setup)();
+    (*test->sPtr.test)();
+    (*suite->teardown)();
+    tally_mocks(reporter);
 }
 
 static void tally_counter(const char *file, int line, int expected, int actual, void *abstract_reporter) {
@@ -322,7 +361,7 @@ static void tally_counter(const char *file, int line, int expected, int actual, 
             actual);
 }
 
-static void die(char *message, ...) {
+static void die(const char *message, ...) {
 	va_list arguments;
 	va_start(arguments, message);
 	vprintf(message, arguments);
@@ -332,3 +371,5 @@ static void die(char *message, ...) {
 
 static void do_nothing() {
 }
+
+/* vim: set ts=4 sw=4 et cindent: */

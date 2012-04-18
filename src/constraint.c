@@ -12,9 +12,16 @@
 
 static void destroy_empty_constraint(Constraint *constraint);
 static int compare_want(Constraint *constraint, intptr_t comparison);
+static int compare_want_not(Constraint *constraint, intptr_t comparison);
 static void test_want(Constraint *constraint, const char *function, intptr_t actual, const char *test_file, int test_line, TestReporter *reporter);
+static void test_want_not(Constraint *constraint, const char *function, intptr_t actual, const char *test_file, int test_line, TestReporter *reporter);
+
+static int compare_non_null(Constraint *constraint, intptr_t comparison);
+static void test_non_null(Constraint *constraint, const char *function, intptr_t actual, const char *test_file, int test_line, TestReporter *reporter);
+
 static int compare_want_string(Constraint *constraint, intptr_t comparison);
 static void test_want_string(Constraint *constraint, const char *function, intptr_t actual, const char *test_file, int test_line, TestReporter *reporter);
+
 static int compare_want_double(Constraint *constraint, intptr_t comparison);
 static void test_want_double(Constraint *constraint, const char *function, intptr_t actual, const char *test_file, int test_line, TestReporter *reporter);
 static Constraint *create_constraint(const char *parameter);
@@ -35,16 +42,28 @@ void test_constraint(Constraint *constraint, const char *function, intptr_t actu
     (*constraint->test)(constraint, function, actual, test_file, test_line, reporter);
 }
 
-Constraint *want_(const char *parameter, intptr_t expected) {
+Constraint *create_want_constraint(const char *parameter, intptr_t expected, CompareConstraintFunc compare, TestConstraintFunc test, CgreenConstraintType type) {
     Constraint *constraint = create_constraint(parameter);
     constraint->parameter = parameter;
-    constraint->compare = &compare_want;
-    constraint->test = &test_want;
+    constraint->compare = compare;
+    constraint->test = test;
     constraint->expected = expected;
 	constraint->out_value = 0;
 	constraint->copy_size = 0;
-	constraint->constraint_type = CG_CONSTRAINT_WANT;
+	constraint->constraint_type = type;
     return constraint;
+} 
+
+Constraint *want_(const char *parameter, intptr_t expected) {
+    return create_want_constraint(parameter, expected, &compare_want, &test_want, CG_CONSTRAINT_WANT);
+}
+
+Constraint *want_not_(const char *parameter, intptr_t expected) {
+    return create_want_constraint(parameter, expected, &compare_want_not, &test_want_not, CG_CONSTRAINT_WANT_NOT);
+}
+
+Constraint *want_non_null_(const char *parameter) {
+    return create_want_constraint(parameter, 0, &compare_non_null, &test_non_null, CG_CONSTRAINT_WANT_NOT);
 }
 
 Constraint *want_string_(const char *parameter, char *expected) {
@@ -57,6 +76,21 @@ Constraint *want_string_(const char *parameter, char *expected) {
 	constraint->copy_size = 0;
 	constraint->constraint_type = CG_CONSTRAINT_WANT;
     return constraint;
+}
+
+static int compare_non_null(Constraint *constraint, intptr_t comparison) {
+    return (NULL != comparison);
+}
+
+static void test_non_null(Constraint *constraint, const char *function, intptr_t actual, const char *test_file, int test_line, TestReporter *reporter) {
+    (*reporter->assert_true)(
+            reporter,
+            test_file,
+            test_line,
+            (*constraint->compare)(constraint, actual),
+            "Wanted non-null, but got null in function [%s] parameter [%s]",
+            function,
+            constraint->parameter);
 }
 
 Constraint *want_double_(const char *parameter, intptr_t expected) {
@@ -100,7 +134,7 @@ Constraint *fill_(const char *parameter, intptr_t out_value, int size)
 }
 
 intptr_t box_double(double d) {
-    BoxedDouble *box = malloc(sizeof(BoxedDouble));
+    BoxedDouble *box = (BoxedDouble *) malloc(sizeof(BoxedDouble));
     box->d = d;
     return (intptr_t)box;
 }
@@ -113,6 +147,10 @@ static int compare_want(Constraint *constraint, intptr_t comparison) {
     return (constraint->expected == comparison);
 }
 
+static int compare_want_not(Constraint *constraint, intptr_t comparison) {
+    return (constraint->expected != comparison);
+}
+
 static void test_want(Constraint *constraint, const char *function, intptr_t actual, const char *test_file, int test_line, TestReporter *reporter) {
     (*reporter->assert_true)(
             reporter,
@@ -120,6 +158,19 @@ static void test_want(Constraint *constraint, const char *function, intptr_t act
             test_line,
             (*constraint->compare)(constraint, actual),
             "Wanted [%d], but got [%d] in function [%s] parameter [%s]",
+            constraint->expected,
+            actual,
+            function,
+            constraint->parameter);
+}
+
+static void test_want_not(Constraint *constraint, const char *function, intptr_t actual, const char *test_file, int test_line, TestReporter *reporter) {
+    (*reporter->assert_true)(
+            reporter,
+            test_file,
+            test_line,
+            (*constraint->compare)(constraint, actual),
+            "Wanted anything but [%d] in function [%s] parameter [%s]",
             constraint->expected,
             actual,
             function,
@@ -182,3 +233,5 @@ static double unbox_double(intptr_t box) {
 static double as_double(intptr_t box) {
     return ((BoxedDouble *)box)->d;
 }
+
+/* vim: set ts=4 sw=4 et cindent: */

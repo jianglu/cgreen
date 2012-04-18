@@ -12,23 +12,24 @@ static void show_breadcrumb(const char *name, void *memo);
 
 TestReporter *create_file_reporter(char *file_name) {
     TestReporter *reporter = create_reporter();
-	reporter->start = &file_reporter_start;
-	reporter->finish = &file_reporter_finish;
-	reporter->show_fail = &show_fail;
-	reporter->show_incomplete = &show_incomplete;
+    if (reporter == NULL)
+        return NULL;
+    reporter->start = &file_reporter_start;
+    reporter->finish = &file_reporter_finish;
+    reporter->show_fail = &show_fail;
+    reporter->show_incomplete = &show_incomplete;
     reporter->reporter_context =  fopen(file_name, "wt");
     return reporter;
 }
 
 static void file_reporter_start(TestReporter *reporter, const char *name) {
-	reporter_start(reporter, name);
-	if (get_breadcrumb_depth((CgreenBreadcrumb *)reporter->breadcrumb) == 1) {
-
+    reporter_start(reporter, name);
+    if (get_breadcrumb_depth((CgreenBreadcrumb *)reporter->breadcrumb) == reporter->log_depth) {
         fprintf(reporter->reporter_context, "Running \"%s\"...\n", get_current_from_breadcrumb((CgreenBreadcrumb *)reporter->breadcrumb));
 
-		printf("Running \"%s\"...\n",
-		       get_current_from_breadcrumb((CgreenBreadcrumb *)reporter->breadcrumb));
-	}
+        printf("Running \"%s\"...\n",
+               get_current_from_breadcrumb((CgreenBreadcrumb *)reporter->breadcrumb));
+    }
 }
 
 static void file_reporter_finish(TestReporter *reporter, const char *name) {

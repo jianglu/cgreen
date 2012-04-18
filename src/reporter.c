@@ -3,7 +3,7 @@
 #include <cgreen/breadcrumb.h>
 #include <stdlib.h>
 #include <stdio.h>
-#if !defined WIN32 && !defined WINCE
+#if !defined WIN32 && !defined WINCE && !defined ANDROID
 #include <sys/msg.h>
 #endif
 #include <stdarg.h>
@@ -25,32 +25,67 @@ TestReporter *get_test_reporter() {
 	return context.reporter;
 }
 
+int setup_reporting(TestReporter *reporter) {
+    reporter->ipc = start_cgreen_messaging(45);
+    if (reporter->ipc == -1) {
+        free(reporter);
+        return -1;
+    }
+    context.reporter = reporter;
+    return 1;
+}
+
 TestReporter *create_reporter() {
-    TestReporter *reporter = (TestReporter *)malloc(sizeof(TestReporter));
+    CgreenBreadcrumb *breadcrumb;
+    TestReporter *reporter = malloc(sizeof(TestReporter));
+    if (reporter == NULL) {
+        return NULL;
+    }
+    breadcrumb = create_breadcrumb();
+    if (breadcrumb == NULL) {
+        destroy_reporter(reporter);
+        return NULL;
+    }
     reporter->destroy = &destroy_reporter;
-	reporter->start = &reporter_start;
-	reporter->finish = &reporter_finish;
-	reporter->show_pass = &show_pass;
-	reporter->show_fail = &show_fail;
-	reporter->show_incomplete = &show_incomplete;
-	reporter->assert_true = &assert_true;
-	reporter->passes = 0;
-	reporter->failures = 0;
-	reporter->exceptions = 0;
-	reporter->breadcrumb = (void *)create_breadcrumb();
-	reporter->ipc = start_cgreen_messaging(45);
-	context.reporter = reporter;
+    reporter->start_suite = &reporter_start_suite;
+    reporter->start_test = &reporter_start;
+    reporter->show_pass = &show_pass;
+    reporter->show_fail = &show_fail;
+    reporter->show_incomplete = &show_incomplete;
+    reporter->assert_true = &assert_true;
+    reporter->finish_test = &reporter_finish;
+    reporter->finish_suite = &reporter_finish;
+    reporter->passes = 0;
+    reporter->failures = 0;
+    reporter->exceptions = 0;
+    reporter->breadcrumb = breadcrumb;
+    reporter->memo = NULL;
+    reporter->log_depth = 1;
+    context.reporter = reporter;
     return reporter;
 }
 
 void destroy_reporter(TestReporter *reporter) {
 	destroy_breadcrumb((CgreenBreadcrumb *)reporter->breadcrumb);
+	destroy_memo((TestReportMemo *)reporter->memo);
     free(reporter);
     context.reporter = NULL;
 }
 
+void destroy_memo(TestReportMemo *memo) {
+	if (! memo) {
+		free(memo);
+		memo = NULL;
+	}
+}
+
 void reporter_start(TestReporter *reporter, const char *name)  {
-	push_breadcrumb((CgreenBreadcrumb *)reporter->breadcrumb, name);
+    push_breadcrumb(reporter->breadcrumb, name);
+}
+
+void reporter_start_suite(TestReporter *reporter, const char *name, const int count) {
+    (void) count;
+    reporter_start(reporter, name);
 }
 
 void reporter_finish(TestReporter *reporter, const char *name) {
@@ -104,3 +139,9 @@ static void read_reporter_results(TestReporter *reporter) {
         reporter->exceptions++;
     }
 }
+
+void set_log_depth(TestReporter *reporter, int log_depth) {
+    reporter->log_depth = log_depth;
+}
+
+/* vim: set ts=4 sw=4 et cindent: */

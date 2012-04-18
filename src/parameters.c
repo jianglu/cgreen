@@ -4,32 +4,33 @@
 #include <string.h>
 #include <ctype.h>
 
+#if defined WINCE || defined WIN32
+#define strdup _strdup
+#endif
+
 static char *tokenise_by_commas_and_whitespace(char *list);
-static char *skip_nulls(char *pointer);
+static char *skip_nulls_until(char *pointer, char *pointer_end);
 static char *end_of_token(char *token);
 static char *strip_box_double(char *token);
 static char *strip_d_macro(char *token);
 
 CgreenVector *create_vector_of_names(const char *parameters) {
     CgreenVector *names = create_cgreen_vector(&free);
-    char *tokens = NULL, *token = NULL;
+    char *parameters_to_tokenize = NULL,  *parameters_end = NULL, *tokens = NULL, *token = NULL;
 
     if ((parameters == NULL) || (strlen(parameters) == 0)) {
         return names;
     }
-#if defined WINCE || defined WIN32
-    tokens = tokenise_by_commas_and_whitespace(_strdup(parameters));
-#else
-    tokens = tokenise_by_commas_and_whitespace(strdup(parameters));
-#endif
+    parameters_to_tokenize = strdup(parameters);
+    if (parameters_to_tokenize == NULL) {
+    	return names;
+    }
+    parameters_end = parameters_to_tokenize + strlen(parameters_to_tokenize);
+    tokens = tokenise_by_commas_and_whitespace(parameters_to_tokenize);
     token = tokens;
     while (token < tokens + strlen(parameters)) {
-        token = strip_d_macro(strip_box_double(skip_nulls(token)));
-#if defined WINCE || defined WIN32
-        cgreen_vector_add(names, _strdup(token));
-#else
+        token = strip_d_macro(strip_box_double(skip_nulls_until(token, parameters_end)));
         cgreen_vector_add(names, strdup(token));
-#endif
         token = end_of_token(token);
     }
     free(tokens);
@@ -46,8 +47,8 @@ static char *tokenise_by_commas_and_whitespace(char *list) {
     return list;
 }
 
-static char *skip_nulls(char *pointer) {
-    while (*pointer == '\0') {
+static char *skip_nulls_until(char *pointer, char *pointer_end) {
+    while (*pointer == '\0' && pointer < pointer_end) {
         pointer++;
     }
     return pointer;
@@ -72,3 +73,5 @@ static char *strip_d_macro(char *token) {
     }
     return token;
 }
+
+/* vim: set ts=4 sw=4 et cindent: */
