@@ -2,9 +2,8 @@
 #include <cgreen/reporter.h>
 #include <stdlib.h>
 #include <math.h>
-#ifdef WIN32
 #include <string.h>
-#endif
+
 
 #ifndef max
     #define max(a,b) ((a) > (b) ? (a) : (b))

@@ -5,7 +5,11 @@
 #if defined WINCE || defined WIN32
 #include <stdio.h>
 #include <windows.h>
+#elif defined(ANDROID) || defined(IPHONE)
+#include <fcntl.h>
+#include <unistd.h>
 #else
+#include <unistd.h>
 #include <sys/msg.h>
 #endif
 
@@ -20,6 +24,8 @@ typedef struct CgreenMessageQueue_ {
     FILE* pReadQueue;
     FILE* pWriteQueue;
     unsigned int owner;
+#elif defined(ANDROID) || defined(IPHONE)
+	int fd[2];
 #else
     int queue;
     pid_t owner;
@@ -57,16 +63,44 @@ int start_cgreen_messaging(int tag) {
 #elif defined WIN32
     HANDLE hReadPipe = NULL;
     HANDLE hWritePipe = NULL;
-    
+
     if(!CreatePipe(&hReadPipe, &hWritePipe, NULL, 100000))
        return -1;
 
     queues = (CgreenMessageQueue *)realloc(queues, sizeof(CgreenMessageQueue) * ++queue_count);
-    queues[queue_count - 1].pReadQueue = hReadPipe; 
-    queues[queue_count - 1].pWriteQueue = hWritePipe; 
+    queues[queue_count - 1].pReadQueue = hReadPipe;
+    queues[queue_count - 1].pWriteQueue = hWritePipe;
     queues[queue_count - 1].owner = 0;
     queues[queue_count - 1].tag = tag;
     return queue_count - 1;
+#elif defined(ANDROID) || defined(IPHONE)
+	int fd[2];
+	int flags, i;
+
+	if(pipe(fd) < 0)
+		return -1;
+
+	for(i=0; i<2; i++) {
+		if((flags = fcntl(fd[i], F_GETFL, 0)) < 0) {
+			close(fd[0]);
+			close(fd[1]);
+			return -1;
+		}
+
+		flags |= O_NONBLOCK;
+
+		if(fcntl(fd[i], F_SETFL, flags) < 0) {
+			close(fd[0]);
+			close(fd[1]);
+			return -1;
+		}
+	}
+
+    queues = (CgreenMessageQueue *)realloc(queues, sizeof(CgreenMessageQueue) * ++queue_count);
+	queues[queue_count - 1].fd[0] = fd[0]; /* set read pipe */
+	queues[queue_count - 1].fd[1] = fd[1]; /* set write pipe */
+	queues[queue_count - 1].tag = tag;
+	return queue_count - 1;
 #else
     CgreenMessageQueue *tmp;
     if (queue_count == 0) {
@@ -111,6 +145,8 @@ void send_cgreen_message(int messaging, int result) {
 #elif defined WIN32
     if(!WriteFile(queues[messaging].pWriteQueue, message, sizeof(CgreenMessage), &dwBytesWritten, NULL))
         dwBytesWritten = 0;
+#elif defined(ANDROID) || defined(IPHONE)
+	write(queues[messaging].fd[1], message, sizeof(CgreenMessage));
 #else
     msgsnd(queues[messaging].queue, message, message_content_size(CgreenMessage), 0);
 #endif
@@ -143,6 +179,10 @@ int receive_cgreen_message(int messaging) {
         if(!ReadFile(queues[messaging].pReadQueue, message, sizeof(CgreenMessage), &dwBytesRead, NULL))
             dwBytesRead = 0;
     result = (dwBytesRead > 0 ? message->result : 0);
+
+#elif defined(ANDROID) || defined(IPHONE)
+	int nbytes = read(queues[messaging].fd[0], message, sizeof(CgreenMessage));
+	result = (nbytes > 0 ? message->result : 0);
 #else
     ssize_t received = msgrcv(queues[messaging].queue,
                               message,
@@ -165,6 +205,9 @@ static void clean_up_messaging(void) {
 #elif defined WIN32
         DisconnectNamedPipe(queues[i].pReadQueue);
         DisconnectNamedPipe(queues[i].pWriteQueue);
+#elif defined(ANDROID) || defined(IPHONE)
+		close(queues[i].fd[0]);
+		close(queues[i].fd[1]);
 #else
         if (queues[i].owner == getpid()) {
             msgctl(queues[i].queue, IPC_RMID, NULL);
